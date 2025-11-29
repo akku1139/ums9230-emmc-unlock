@@ -1,0 +1,33 @@
+#!/bin/bash
+
+function pause() {
+  read -p "Press Enter to continue..."
+}
+
+if [ ! -f "u-boot-spl-16k-sign.bin" ]; then
+  ./spd_dump --wait 300 exec_addr 0x65015f08 fdl fdl1-dl.bin 0x65000800 fdl fdl2-dl.bin 0x9efffe00 exec r splloader r uboot e splloader e splloader_bak reset
+  echo "(This is a notice, not an error.) Don't continue if you see find port failed, just close and re-run this batch"
+  pause
+  ./gen_spl-unlock splloader.bin
+  if [ $? -eq 0 ]; then
+    mv "splloader.bin" "u-boot-spl-16k-sign.bin"
+    ./chsize uboot.bin
+    mv uboot.bin uboot_bak.bin
+  fi
+  pause
+else
+  ./spd_dump --wait 300 exec_addr 0x65015f08 fdl fdl1-dl.bin 0x65000800 fdl fdl2-dl.bin 0x9efffe00 exec e splloader e splloader_bak reset
+  echo "(This is a notice, not an error.) Don't continue if you see find port failed, just close and re-run this batch"
+pause
+fi
+
+./spd_dump --wait 300 exec_addr 0x65015f08 fdl fdl1-dl.bin 0x65000800 fdl fdl2-dl.bin 0x9efffe00 exec w uboot fdl2-cboot.bin reset
+sleep 10
+# unlock runs here, may need twice
+./spd_dump exec_addr 0x65015f08 fdl spl-unlock.bin 0x65000800
+# check unlock (if get 64 zeros, locked; if 32 string + 16 hash + 16 hash, unlocked)
+./spd_dump exec_addr 0x65015f08 fdl fdl1-dl.bin 0x65000800 fdl fdl2-dl.bin 0x9efffe00 exec verbose 2 read_part miscdata 8192 64 m.bin reset
+pause
+./restore spl and uboot
+./spd_dump exec_addr 0x65015f08 fdl fdl1-dl.bin 0x65000800 fdl fdl2-dl.bin 0x9efffe00 exec r boot w splloader u-boot-spl-16k-sign.bin w uboot uboot_bak.bin  w misc misc-wipe.bin reset
+pause
